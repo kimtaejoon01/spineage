@@ -1,11 +1,9 @@
 // electron/renderer/js/ovf.js
 import {API, $, show, post} from './common.js';
 
-/* 전역 상태 */
 let session=null, thumbs=[], selected=[], kps=[];
 const canvas=new fabric.Canvas('cv',{selection:false});
 
-/* ===================== 썸네일/프레임 ===================== */
 function toggleSel(idx,img){
   if(selected.includes(idx)){selected=selected.filter(x=>x!==idx);img.classList.remove('sel');}
   else{if(selected.length>=3)return;selected.push(idx);img.classList.add('sel');}
@@ -19,7 +17,6 @@ function toggleSel(idx,img){
   checkReady();
 }
 
-/* ===================== 키포인트 입력 ===================== */
 function drawPoints(){
   canvas.getObjects('circle').forEach(o=>canvas.remove(o));
   kps.forEach(p=>canvas.add(new fabric.Circle({radius:4,left:p.x-4,top:p.y-4,fill:'red',stroke:'yellow',strokeWidth:1,selectable:false})));
@@ -51,15 +48,20 @@ $('kptable').addEventListener('click',e=>{
 });
 $('btn-reset').onclick=()=>{kps.length=0; drawPoints(); refreshTable(); checkReady();};
 
-/* ===================== 임상 정보 토글 ===================== */
 $('use_clin').onchange=e=> $('clin').style.display=e.target.checked?'block':'none';
 
-/* ===================== ROI 미리보기 + 준비체크 ===================== */
 async function checkReady(){
   const ready = session && selected.length===3 && kps.length===6;
   $('btn-predict').disabled=!ready;
   if(ready) {
-    await previewROI();
+    try {
+      await previewROI();
+    } catch (err) {
+      console.error(err);
+      $('roi').classList.add('d-none');
+      const placeholder = $('roi-placeholder');
+      if(placeholder) placeholder.classList.remove('d-none');
+    }
   } else {
     $('roi').classList.add('d-none');
     const placeholder = $('roi-placeholder');
@@ -79,31 +81,35 @@ async function previewROI(){
   if(placeholder) placeholder.classList.add('d-none');
 }
 
-/* ===================== /load ===================== */
 $('btn-load').onclick=async()=>{
   const files=$('files').files;
   if(!files.length){alert('파일 선택');return;}
   const fd=new FormData();
   [...files].forEach(f=>fd.append('files',f));
-  const {session:sid,thumbs:ths}=await post('/load', fd, 'spin-load');
 
-  session=sid; thumbs=ths; selected.length=0; kps.length=0;
-  drawPoints(); refreshTable();
-  $('roi').classList.add('d-none');
-  const placeholder = $('roi-placeholder');
-  if(placeholder) placeholder.classList.remove('d-none');
+  try {
+    const {session:sid,thumbs:ths}=await post('/load', fd, 'spin-load');
 
-  const cont=$('thumbs'); cont.innerHTML='';
-  thumbs.forEach((b64,i)=>{
-    const im=new Image(); im.src=b64; im.className='thumb'; im.title=i;
-    im.onclick=()=>toggleSel(i,im); cont.appendChild(im);
-  });
-  
-  // 로딩 상태 제거
-  if(window.removeUploadLoading) window.removeUploadLoading();
+    session=sid; thumbs=ths; selected.length=0; kps.length=0;
+    drawPoints(); refreshTable();
+    $('roi').classList.add('d-none');
+    const placeholder = $('roi-placeholder');
+    if(placeholder) placeholder.classList.remove('d-none');
+
+    const cont=$('thumbs'); cont.innerHTML='';
+    thumbs.forEach((b64,i)=>{
+      const im=new Image(); im.src=b64; im.className='thumb'; im.title=i;
+      im.onclick=()=>toggleSel(i,im); cont.appendChild(im);
+    });
+
+    if(window.removeUploadLoading) window.removeUploadLoading();
+  } catch (err) {
+    console.error(err);
+    if(window.removeUploadLoading) window.removeUploadLoading();
+    alert('DICOM 로드 실패\n' + err.message);
+  }
 };
 
-/* ===================== /predict ===================== */
 $('btn-predict').onclick=async()=>{
   const fd=new FormData();
   fd.append('session',session);
@@ -114,8 +120,14 @@ $('btn-predict').onclick=async()=>{
     ['age','sex','bmd'].forEach(id=>fd.append(id,$(id).value));
     ['pre','post'].forEach(id=>fd.append(id,$(id).checked));
   }
-  const {probability:p}=await post('/predict', fd, 'spin-predict');
-  $('result').innerHTML=`<div class="alert ${p>0.5?'alert-danger':'alert-success'}">
-      골다공성 압박골절 진행 확률: <strong>${(p*100).toFixed(1)}%</strong>
-    </div>`;
+
+  try {
+    const {probability:p}=await post('/predict', fd, 'spin-predict');
+    $('result').innerHTML=`<div class="alert ${p>0.5?'alert-danger':'alert-success'}">
+        골다공성 압박골절 진행 확률: <strong>${(p*100).toFixed(1)}%</strong>
+      </div>`;
+  } catch (err) {
+    console.error(err);
+    alert('예측 실패\n' + err.message);
+  }
 };

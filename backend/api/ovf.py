@@ -18,7 +18,7 @@ AGE_MEAN, AGE_STD = 72.78, 9.38
 BMD_MEAN, BMD_STD = -3.154, 1.077
 ZERO_META = torch.zeros(1, 5, device=device)
 
-dicom_sessions: Dict[str, np.ndarray] = {}
+dicom_sessions: Dict[str, dict] = {}
 ovf_models: Dict[bool, OVFNet] = {}
 
 
@@ -60,6 +60,13 @@ def _parse_selection(frames: str, kps: str, frame_count: int):
     return sel, kp
 
 
+def _get_session(session: str) -> dict:
+    data = dicom_sessions.get(session)
+    if data is None:
+        raise HTTPException(400, "Bad session")
+    return data
+
+
 @router.post("/load")
 async def load_dicom(files: list[UploadFile] = File(...)):
     if not files:
@@ -70,16 +77,21 @@ async def load_dicom(files: list[UploadFile] = File(...)):
         raise HTTPException(400, f"Failed to read DICOM series: {exc}") from exc
 
     sid = str(uuid4())
-    dicom_sessions[sid] = arr
-    thumbs = [f"data:image/png;base64,{to_b64(slice_uint8(arr[i]))}" for i in range(arr.shape[0])]
+    dicom_sessions[sid] = {
+        "volume": arr,
+        "n4_corrected": False,
+    }
+    thumbs = [
+        f"data:image/png;base64,{to_b64(slice_uint8(arr[i]))}"
+        for i in range(arr.shape[0])
+    ]
     return {"session": sid, "thumbs": thumbs}
 
 
 @router.post("/preview")
 async def preview(session: str = Form(...), frames: str = Form(...), kps: str = Form(...)):
-    if session not in dicom_sessions:
-        raise HTTPException(400, "Bad session")
-    arr = dicom_sessions[session]
+    data = _get_session(session)
+    arr = data["volume"]
     sel, kp = _parse_selection(frames, kps, arr.shape[0])
 
     bb = get_bbox(kp, 1.5)
@@ -101,9 +113,8 @@ async def predict(
     pre: bool | None = Form(False),
     post: bool | None = Form(False),
 ):
-    if session not in dicom_sessions:
-        raise HTTPException(400, "Bad session")
-    arr = dicom_sessions[session]
+    data = _get_session(session)
+    arr = data["volume"]
     sel, kp = _parse_selection(frames, kps, arr.shape[0])
 
     if use_clinical:
@@ -112,9 +123,13 @@ async def predict(
         if not np.isfinite(age) or not np.isfinite(bmd):
             raise HTTPException(400, "Invalid clinical value")
 
-    if arr.dtype != np.float32:
-        arr = n4_bias_correction(arr)
-        dicom_sessions[session] = arr
+    if not data["n4_corrected"]:
+        try:
+            arr = n4_bias_correction(arr)
+        except Exception as exc:
+            raise HTTPException(400, f"N4 bias correction failed: {exc}") from exc
+        data["volume"] = arr
+        data["n4_corrected"] = True
 
     bb = get_bbox(kp, 1.5)
     crops = [crop(arr[i], bb) for i in sel]
