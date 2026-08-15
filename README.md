@@ -117,7 +117,7 @@ backend/models/
 - `use_clinical_1.pth`: OVF 모델, 임상정보 사용
 - `checkpoint_best.pth`: HDF5 Multitask 모델
 
-모델 파일은 별도로 전달받아 위 경로에 복사해야 합니다.
+모델 파일은 https://drive.google.com/drive/folders/1889AUBICAAKOymLpGFGfjiYGgqqmTova 경로에서 다운받을 수 있습니다. 
 
 모델이 없으면 서버 시작 또는 예측 시 `checkpoint not found` 오류가 발생합니다.
 
