@@ -1,12 +1,18 @@
-
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
-torchvision == 0.21.0
-numpy ==1.26.4
-pillow ==10.4.0
+python-multipart>=0.0.9
+
+torchvision==0.21.0
+numpy==1.26.4
+pillow==10.4.0
 open_clip_torch==2.32.0
 timm==1.0.15
 safetensors==0.5.3
-SimpleITK==2.4.1
 transformers==4.51.3
-pydicom
+
+SimpleITK==2.4.1
+pydicom>=2.4,<4
+h5py>=3.10,<4
+tqdm>=4.66,<5
+TotalSegmentator
+ACSConv
