@@ -1,0 +1,18 @@
+# Data
+data_root: samples/cls
+vertical_filp: True
+
+# GPU
+use_gpu: False
+gpu_id: '1'
+
+# hyper-paraemeter
+batch_size: 32
+augmentation: False
+
+# Monitor
+with_monitor: False
+user: 'smchoi'
+
+# Path
+resume: seg_model_checkpoint.pth

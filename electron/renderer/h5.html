@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>척추 골절 예측 · 멀티태스크 딥러닝</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<style>
+:root {
+  --primary: #0ea5e9;
+  --primary-dark: #0284c7;
+  --secondary: #6366f1;
+  --accent: #22d3ee;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --dark: #0f172a;
+  --dark-lighter: #1e293b;
+  --gray-900: #1e293b;
+  --gray-800: #1e293b;
+  --gray-700: #334155;
+  --gray-600: #475569;
+  --gray-500: #64748b;
+  --gray-400: #94a3b8;
+  --gray-300: #cbd5e1;
+  --gray-200: #e2e8f0;
+  --gray-100: #f1f5f9;
+}
+
+* {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--dark);
+  color: #fff;
+  overflow: hidden;
+}
+
+.bg-gradient-blur {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bg-gradient-blur::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 90% 80%, rgba(34, 211, 238, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 40%);
+  animation: bgMove 25s ease-in-out infinite;
+}
+
+@keyframes bgMove {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(-2%, -2%) rotate(1deg); }
+}
+
+.grid-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 50px 50px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.content-wrapper {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* 네비게이션 */
+.navbar {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding: 0.75rem 1.5rem;
+  flex-shrink: 0;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: white !important;
+  text-decoration: none;
+  transition: all 0.3s;
+}
+
+.navbar-brand:hover { opacity: 0.8; }
+
+.brand-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.navbar-center {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.navbar-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.navbar-badges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.nav-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+}
+
+.nav-badge.ct {
+  background: rgba(14, 165, 233, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.nav-badge.vertebra {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.navbar-info {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navbar-info a {
+  color: var(--gray-400);
+  text-decoration: none;
+}
+
+.navbar-info a:hover {
+  color: var(--accent);
+}
+
+#app {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+/* 사이드바 */
+#sidebar {
+  width: 340px;
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 20px;
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.section-block {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.section-header.no-border {
+  border-bottom: none;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0;
+}
+
+.section-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.section-icon.gpu {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.2));
+  color: #fbbf24;
+}
+
+.section-icon.upload {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(34, 211, 238, 0.2));
+  color: var(--accent);
+}
+
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.section-subtitle {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+/* GPU 입력 */
+.gpu-config {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gpu-config .input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  transition: all 0.3s;
+}
+
+.gpu-config .input-wrapper:focus-within {
+  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.gpu-config .input-wrapper i {
+  color: var(--gray-500);
+  font-size: 0.9rem;
+}
+
+.gpu-config input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.8rem;
+  color: #fff;
+}
+
+.gpu-config input::placeholder { color: var(--gray-600); }
+
+.gpu-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.gpu-status.cpu {
+  background: rgba(100, 116, 139, 0.2);
+  color: var(--gray-400);
+}
+
+.gpu-status.gpu-active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+/* 업로드 탭 */
+.upload-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.upload-tab {
+  flex: 1;
+  padding: 0.6rem 0.5rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-400);
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.upload-tab:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--gray-300);
+}
+
+.upload-tab.active {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-color: transparent;
+  color: #000;
+}
+
+.upload-tab i {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+/* 파일 입력 */
+.upload-content { display: none; }
+.upload-content.active { display: block; }
+
+.file-drop-zone {
+  border: 2px dashed rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: rgba(255,255,255,0.02);
+}
+
+.file-drop-zone:hover {
+  border-color: var(--primary);
+  background: rgba(14, 165, 233, 0.05);
+}
+
+.file-drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.file-drop-zone.processing {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.file-drop-zone i.upload-icon {
+  font-size: 2rem;
+  color: var(--gray-500);
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.file-drop-zone .upload-text {
+  font-size: 0.85rem;
+  color: var(--gray-300);
+  display: block;
+  font-weight: 500;
+}
+
+.file-drop-zone .upload-hint {
+  font-size: 0.7rem;
+  color: var(--gray-600);
+  margin-top: 0.35rem;
+  display: block;
+}
+
+.file-selected {
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+/* 로딩 애니메이션 */
+.loading-container {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  background: rgba(14, 165, 233, 0.05);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 12px;
+}
+
+.loading-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.loading-title .spinner-sm {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(34, 211, 238, 0.3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-stage {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  margin-bottom: 0.3rem;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  transition: all 0.3s ease;
+}
+
+.loading-stage:last-child { margin-bottom: 0; }
+
+.loading-stage .stage-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  background: rgba(255,255,255,0.05);
+  color: var(--gray-500);
+}
+
+.loading-stage .stage-text {
+  flex: 1;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--gray-400);
+}
+
+.loading-stage.active {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+}
+
+.loading-stage.active .stage-icon {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+.loading-stage.active .stage-text { color: #fff; }
+
+.loading-stage.completed {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.loading-stage.completed .stage-icon {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.loading-stage.completed .stage-text { color: #34d399; }
+
+/* 에러 메시지 */
+.error-msg {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 0.75rem;
+  padding: 0.65rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 모델 정보 박스 */
+.model-info-box {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  padding: 0.85rem;
+}
+
+.model-info-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #a78bfa;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.model-info-content {
+  font-size: 0.7rem;
+  color: var(--gray-400);
+  line-height: 1.5;
+}
+
+.model-info-content strong {
+  color: var(--gray-300);
+}
+
+/* 메인 영역 */
+#main {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 20px;
+  padding: 1.5rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.main-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.main-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.main-section-title::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-radius: 2px;
+}
+
+.item-count {
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+}
+
+/* 척추체 선택 안내 */
+.vertebra-guide {
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vertebra-guide i {
+  color: #fbbf24;
+  font-size: 1rem;
+}
+
+.vertebra-guide-text {
+  font-size: 0.75rem;
+  color: var(--gray-300);
+}
+
+.vertebra-guide-text strong {
+  color: #fbbf24;
+}
+
+/* 카드 그리드 */
+#list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.card-thumb {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.card-thumb:hover {
+  transform: translateY(-4px);
+  border-color: rgba(14, 165, 233, 0.3);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+}
+
+.card-thumb.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.3);
+}
+
+.card-thumb-img {
+  width: 100%;
+  height: 110px;
+  background: rgba(255,255,255,0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.card-thumb-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vertebra-label {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  background: rgba(0,0,0,0.7);
+  color: #fbbf24;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.card-thumb-body { padding: 0.75rem; }
+
+.card-thumb-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.5rem;
+}
+
+.card-thumb-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.card-thumb-actions .btn-sm {
+  flex: 1;
+  padding: 0.4rem;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-select {
+  background: rgba(255,255,255,0.05);
+  color: var(--gray-400);
+  border: 1px solid rgba(255,255,255,0.1) !important;
+}
+
+.btn-select:hover {
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--accent);
+  border-color: var(--accent) !important;
+}
+
+.btn-select.active {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #000;
+}
+
+.btn-view {
+  background: rgba(99, 102, 241, 0.1);
+  color: #a78bfa;
+  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+}
+
+.btn-view:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+/* 빈 상태 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem;
+  color: var(--gray-500);
+  grid-column: 1 / -1;
+}
+
+.empty-state i {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.5;
+}
+
+.empty-state p { font-size: 0.85rem; }
+
+/* 미리보기 영역 */
+.preview-section {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 16px;
+  padding: 1.25rem;
+}
+
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  max-width: 300px;
+}
+
+.slider-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gray-400);
+  white-space: nowrap;
+}
+
+.slider-value {
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  min-width: 45px;
+  text-align: center;
+}
+
+input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  background: rgba(255,255,255,0.1);
+  height: 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
+}
+
+.preview-canvases {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.canvas-wrapper { text-align: center; }
+
+.canvas-wrapper canvas {
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: #000;
+}
+
+.canvas-label {
+  margin-top: 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gray-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.canvas-label .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+
+.canvas-label .dot.original { background: var(--gray-400); }
+.canvas-label .dot.muscle { background: #ef4444; }
+.canvas-label .dot.vertebra { background: #3b82f6; }
+
+/* 분석 패널 */
+.analysis-panel {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 16px;
+  padding: 1.25rem;
+}
+
+.analysis-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.analysis-panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.analysis-panel-header .icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(52, 211, 153, 0.2));
+  color: #34d399;
+}
+
+.analysis-panel-header .title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.analysis-panel-header .subtitle {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}
+
+.task-badges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.task-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+}
+
+.task-badge.cls {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.task-badge.pred {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.analysis-content {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.form-group label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group select {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #fff;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: rgba(14, 165, 233, 0.05);
+}
+
+.form-group select option {
+  background: var(--dark-lighter);
+  color: #fff;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+  grid-column: 1 / -1;
+}
+
+.custom-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.custom-checkbox input { display: none; }
+
+.custom-checkbox .checkmark {
+  width: 20px; height: 20px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: transparent;
+  transition: all 0.3s;
+}
+
+.custom-checkbox input:checked + .checkmark {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-color: transparent;
+  color: #000;
+}
+
+.custom-checkbox .label-text {
+  font-size: 0.8rem;
+  color: var(--gray-300);
+}
+
+.custom-checkbox .label-desc {
+  font-size: 0.65rem;
+  color: var(--gray-500);
+}
+
+.predict-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 220px;
+}
+
+.btn-predict {
+  padding: 1rem 1.5rem;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s;
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  color: #000;
+}
+
+.btn-predict:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+}
+
+.btn-predict:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.selection-info {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  text-align: center;
+  padding: 0.5rem;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+}
+
+.selection-info strong {
+  color: var(--accent);
+}
+
+/* 결과 영역 */
+.result-container {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.result-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.result-card.fracture-positive {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.result-card.fracture-negative {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.result-card-header {
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.result-card-header .icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.result-card.fracture-positive .icon {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.result-card.fracture-negative .icon {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.result-card-header .label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.result-card-header .title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.result-card-header .value {
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.result-card.fracture-positive .value { color: #f87171; }
+.result-card.fracture-negative .value { color: #34d399; }
+
+.result-card-body {
+  padding: 1rem 1.25rem;
+}
+
+.result-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.result-card.fracture-positive .result-status { color: #f87171; }
+.result-card.fracture-negative .result-status { color: #34d399; }
+
+.result-meta {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+/* 생존율 결과 카드 */
+.result-card.survival {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.result-card.survival .icon {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a78bfa;
+}
+
+.result-card.survival .value {
+  color: #a78bfa;
+}
+
+.survival-chart {
+  margin-top: 0.75rem;
+}
+
+.survival-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.survival-bar .year {
+  font-size: 0.7rem;
+  color: var(--gray-400);
+  width: 35px;
+}
+
+.survival-bar .bar-bg {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.survival-bar .bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.survival-bar .percent {
+  font-size: 0.7rem;
+  color: var(--gray-300);
+  width: 40px;
+  text-align: right;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* 스피너 */
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 반응형 */
+@media (max-width: 1200px) {
+  #app { flex-direction: column; }
+  #sidebar { width: 100%; max-height: 350px; }
+  .options-grid { grid-template-columns: repeat(2, 1fr); }
+  .analysis-content { grid-template-columns: 1fr; }
+  .predict-section { flex-direction: row; align-items: center; }
+}
+
+@media (max-width: 768px) {
+  .preview-canvases {
+    justify-content: flex-start;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.5rem;
+  }
+  .options-grid { grid-template-columns: 1fr 1fr; }
+  .navbar-center { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg-gradient-blur"></div>
+<div class="grid-overlay"></div>
+
+<div class="content-wrapper">
+  <nav class="navbar">
+    <a class="navbar-brand" href="index.html">
+      <div class="brand-icon"><i class="bi bi-cpu"></i></div>
+      AI Toolbox
+    </a>
+    <div class="navbar-center">
+      <span class="navbar-title">척추 골절 예측 · 멀티태스크 딥러닝</span>
+      <div class="navbar-badges">
+        <span class="nav-badge ct">CT 기반</span>
+        <span class="nav-badge vertebra">T12-L4</span>
+      </div>
+    </div>
+    <div class="navbar-info">
+      <i class="bi bi-journal-text"></i>
+      <a href="https://doi.org/..." target="_blank" title="참고 논문">Ref: Multitask DL for VF Prediction</a>
+    </div>
+  </nav>
+
+  <div id="app">
+    <!-- 사이드바 -->
+    <div id="sidebar">
+      
+      <!-- GPU 설정 -->
+      <div class="section-block">
+        <div class="section-header no-border">
+          <div class="section-icon gpu"><i class="bi bi-gpu-card"></i></div>
+          <div>
+            <div class="section-title">GPU 설정</div>
+            <div class="section-subtitle">전처리 연산 장치</div>
+          </div>
+        </div>
+        <div class="gpu-config">
+          <div class="input-wrapper">
+            <i class="bi bi-gpu-card"></i>
+            <input type="text" id="gpu_id" placeholder="GPU ID (비우면 CPU)">
+          </div>
+          <div class="gpu-status cpu" id="gpu-status">
+            <i class="bi bi-cpu"></i>
+            CPU
+          </div>
+        </div>
+      </div>
+
+      <!-- 파일 업로드 -->
+      <div class="section-block">
+        <div class="section-header">
+          <div class="section-icon upload"><i class="bi bi-cloud-arrow-up"></i></div>
+          <div>
+            <div class="section-title">CT 영상 업로드</div>
+            <div class="section-subtitle">선택 시 자동 전처리</div>
+          </div>
+        </div>
+        
+        <div class="upload-tabs">
+          <div class="upload-tab active" data-tab="nifti">
+            <i class="bi bi-file-earmark-medical"></i>
+            NIfTI
+          </div>
+          <div class="upload-tab" data-tab="dicom">
+            <i class="bi bi-files"></i>
+            DICOM
+          </div>
+          <div class="upload-tab" data-tab="h5">
+            <i class="bi bi-database"></i>
+            HDF5
+          </div>
+        </div>
+
+        <!-- NIfTI -->
+        <div class="upload-content active" id="content-nifti">
+          <input type="file" id="nifti" accept=".nii,.nii.gz,.gz" style="display:none;">
+          <div class="file-drop-zone" id="nifti-zone">
+            <i class="bi bi-file-earmark-medical upload-icon"></i>
+            <span class="upload-text">NIfTI 파일 드래그 또는 클릭</span>
+            <span class="upload-hint">.nii, .nii.gz 지원</span>
+            <div class="file-selected d-none" id="nifti-selected">
+              <i class="bi bi-file-check"></i>
+              <span></span>
+            </div>
+          </div>
+          <div id="loading-nifti" class="loading-container d-none">
+            <div class="loading-title">
+              <div class="spinner-sm"></div>
+              전처리 진행 중...
+            </div>
+            <div class="loading-stage" data-stage="1">
+              <div class="stage-icon"><i class="bi bi-upload"></i></div>
+              <div class="stage-text">CT 영상 불러오기</div>
+            </div>
+            <div class="loading-stage" data-stage="2">
+              <div class="stage-icon"><i class="bi bi-grid-3x3"></i></div>
+              <div class="stage-text">T12-L4 척추체 분할</div>
+            </div>
+            <div class="loading-stage" data-stage="3">
+              <div class="stage-icon"><i class="bi bi-diagram-3"></i></div>
+              <div class="stage-text">근육 마스크 생성</div>
+            </div>
+            <div class="loading-stage" data-stage="4">
+              <div class="stage-icon"><i class="bi bi-file-earmark-check"></i></div>
+              <div class="stage-text">HDF5 변환 완료</div>
+            </div>
+          </div>
+          <div id="err-nifti" class="error-msg d-none">
+            <i class="bi bi-exclamation-circle"></i>
+            <span></span>
+          </div>
+        </div>
+
+        <!-- DICOM -->
+        <div class="upload-content" id="content-dicom">
+          <input type="file" id="dicoms" multiple style="display:none;">
+          <div class="file-drop-zone" id="dicom-zone">
+            <i class="bi bi-files upload-icon"></i>
+            <span class="upload-text">DICOM 시리즈 드래그 또는 클릭</span>
+            <span class="upload-hint">다중 선택 가능</span>
+            <div class="file-selected d-none" id="dicom-selected">
+              <i class="bi bi-files"></i>
+              <span></span>
+            </div>
+          </div>
+          <div id="loading-dicom" class="loading-container d-none">
+            <div class="loading-title">
+              <div class="spinner-sm"></div>
+              전처리 진행 중...
+            </div>
+            <div class="loading-stage" data-stage="1">
+              <div class="stage-icon"><i class="bi bi-upload"></i></div>
+              <div class="stage-text">DICOM → NIfTI 변환</div>
+            </div>
+            <div class="loading-stage" data-stage="2">
+              <div class="stage-icon"><i class="bi bi-grid-3x3"></i></div>
+              <div class="stage-text">T12-L4 척추체 분할</div>
+            </div>
+            <div class="loading-stage" data-stage="3">
+              <div class="stage-icon"><i class="bi bi-diagram-3"></i></div>
+              <div class="stage-text">근육 마스크 생성</div>
+            </div>
+            <div class="loading-stage" data-stage="4">
+              <div class="stage-icon"><i class="bi bi-file-earmark-check"></i></div>
+              <div class="stage-text">HDF5 변환 완료</div>
+            </div>
+          </div>
+          <div id="err-dicom" class="error-msg d-none">
+            <i class="bi bi-exclamation-circle"></i>
+            <span></span>
+          </div>
+        </div>
+
+        <!-- HDF5 -->
+        <div class="upload-content" id="content-h5">
+          <input type="file" id="files" accept=".h5,.hdf5" multiple style="display:none;">
+          <div class="file-drop-zone" id="h5-zone">
+            <i class="bi bi-database upload-icon"></i>
+            <span class="upload-text">전처리된 HDF5 업로드</span>
+            <span class="upload-hint">.h5, .hdf5 (전처리 불필요)</span>
+            <div class="file-selected d-none" id="h5-selected">
+              <i class="bi bi-files"></i>
+              <span></span>
+            </div>
+          </div>
+          <div id="loading-h5" class="loading-container d-none">
+            <div class="loading-title">
+              <div class="spinner-sm"></div>
+              파일 로딩 중...
+            </div>
+          </div>
+          <div id="err-h5" class="error-msg d-none">
+            <i class="bi bi-exclamation-circle"></i>
+            <span></span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 모델 정보 -->
+      <div class="model-info-box">
+        <div class="model-info-title">
+          <i class="bi bi-info-circle"></i>
+          모델 정보
+        </div>
+        <div class="model-info-content">
+          <strong>대상:</strong> 척추 압박 골절 (VCF)<br>
+          <strong>입력:</strong> CT 기반 T12-L4 척추체 + 근육 마스크<br>
+          <strong>출력:</strong> 골절 분류 + 5년 생존율 예측
+        </div>
+      </div>
+    </div>
+
+    <!-- 메인 영역 -->
+    <div id="main">
+      
+      <!-- 1. 척추체 목록 -->
+      <div class="main-section">
+        <div class="main-section-header">
+          <h3 class="main-section-title">분할된 척추체 (T12-L4)</h3>
+          <span class="item-count" id="item-count">0개 로드됨 · 0개 선택</span>
+        </div>
+        
+        <div class="vertebra-guide">
+          <i class="bi bi-lightbulb"></i>
+          <div class="vertebra-guide-text">
+            분석할 <strong>연속된 3개 척추체</strong>를 선택하세요. (예: L1, L2, L3)
+          </div>
+        </div>
+        
+        <div id="list">
+          <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p>CT 영상을 업로드하면 T12-L4 척추체가 자동 분할됩니다</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 미리보기 -->
+      <div class="preview-section">
+        <div class="main-section-header" style="margin-bottom: 0;">
+          <h3 class="main-section-title">슬라이스 미리보기</h3>
+        </div>
+        <div class="preview-controls">
+          <div class="slider-group">
+            <span class="slider-label">Z축 슬라이스</span>
+            <input type="range" id="z" min="0" max="23" step="1" value="12">
+            <span class="slider-value" id="zlab">12</span>
+          </div>
+        </div>
+        <div class="preview-canvases">
+          <div class="canvas-wrapper">
+            <canvas id="cv-img" width="200" height="200"></canvas>
+            <div class="canvas-label">
+              <span class="dot original"></span>
+              CT 원본
+            </div>
+          </div>
+          <div class="canvas-wrapper">
+            <canvas id="cv-mus" width="200" height="200"></canvas>
+            <div class="canvas-label">
+              <span class="dot muscle"></span>
+              근육 마스크
+            </div>
+          </div>
+          <div class="canvas-wrapper">
+            <canvas id="cv-ver" width="200" height="200"></canvas>
+            <div class="canvas-label">
+              <span class="dot vertebra"></span>
+              척추 마스크
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 분석 패널 -->
+      <div class="analysis-panel">
+        <div class="analysis-panel-header">
+          <div class="analysis-panel-header-left">
+            <div class="icon"><i class="bi bi-activity"></i></div>
+            <div>
+              <div class="title">멀티태스크 예측 실행</div>
+              <div class="subtitle">골절 분류 + 5년 생존율 동시 예측</div>
+            </div>
+          </div>
+          <div class="task-badges">
+            <span class="task-badge cls">CLS 골절분류</span>
+            <span class="task-badge pred">PRED 생존예측</span>
+          </div>
+        </div>
+        
+        <div class="analysis-content">
+          <div class="options-grid">
+            <div class="form-group">
+              <label>Classifier</label>
+              <select id="classifier">
+                <option selected>fc</option>
+                <option>gru</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Dimension</label>
+              <select id="dimension">
+                <option selected>2D</option>
+                <option>3D</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Input Type</label>
+              <select id="bone_only">
+                <option selected>bone_only</option>
+                <option>bone_muscle</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Channels</label>
+              <select id="channels_num_2d">
+                <option selected>3</option>
+                <option>2</option>
+                <option>4</option>
+              </select>
+            </div>
+            <div class="checkbox-row">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="enable-cls" checked>
+                <span class="checkmark"><i class="bi bi-check"></i></span>
+                <div>
+                  <div class="label-text">골절 분류 (CLS)</div>
+                  <div class="label-desc">골절 유무 이진 분류</div>
+                </div>
+              </label>
+              <label class="custom-checkbox">
+                <input type="checkbox" id="enable-pred" checked>
+                <span class="checkmark"><i class="bi bi-check"></i></span>
+                <div>
+                  <div class="label-text">생존 예측 (PRED)</div>
+                  <div class="label-desc">5년 생존율 추정</div>
+                </div>
+              </label>
+            </div>
+          </div>
+          
+          <div class="predict-section">
+            <button id="btn-predict" class="btn-predict" disabled>
+              <i class="bi bi-lightning-charge"></i>
+              예측 실행
+              <div class="spinner d-none" id="spin-predict"></div>
+            </button>
+            <div class="selection-info" id="selection-status">
+              연속된 <strong>3개</strong> 척추체를 선택하세요
+            </div>
+          </div>
+        </div>
+        
+        <div id="result" class="result-container d-none"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { API, $, post } from './js/common.js';
+
+let session = null;
+let items = [];
+let selectedFids = new Set();
+let focusFid = null;
+let source = null;
+let volume = null;
+
+const cvs = {
+  img: $('cv-img').getContext('2d'),
+  mus: $('cv-mus').getContext('2d'),
+  ver: $('cv-ver').getContext('2d'),
+};
+
+// GPU 상태 업데이트
+function updateGpuStatus() {
+  const gpuId = $('gpu_id').value.trim();
+  const statusEl = $('gpu-status');
+  
+  if (gpuId) {
+    statusEl.className = 'gpu-status gpu-active';
+    statusEl.innerHTML = `<i class="bi bi-gpu-card"></i> GPU ${gpuId}`;
+  } else {
+    statusEl.className = 'gpu-status cpu';
+    statusEl.innerHTML = `<i class="bi bi-cpu"></i> CPU`;
+  }
+}
+
+$('gpu_id').addEventListener('input', updateGpuStatus);
+
+// 탭 전환
+document.querySelectorAll('.upload-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.upload-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.upload-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    $(`content-${tab.dataset.tab}`).classList.add('active');
+  });
+});
+
+// 파일 드롭존 초기화
+function initDropZone(zoneId, inputId, selectedId, multiple, autoProcess) {
+  const zone = $(zoneId);
+  const input = $(inputId);
+  const selected = $(selectedId);
+  
+  zone.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    input.click();
+  });
+  
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    zone.classList.add('dragover');
+  });
+  
+  zone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    zone.classList.remove('dragover');
+  });
+  
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    zone.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const dt = new DataTransfer();
+      if (multiple) {
+        for (let i = 0; i < files.length; i++) dt.items.add(files[i]);
+      } else {
+        dt.items.add(files[0]);
+      }
+      input.files = dt.files;
+      updateSelectedDisplay(input, selected, multiple);
+      if (autoProcess) autoProcess();
+    }
+  });
+  
+  input.addEventListener('change', () => {
+    updateSelectedDisplay(input, selected, multiple);
+    if (input.files.length > 0 && autoProcess) autoProcess();
+  });
+}
+
+function updateSelectedDisplay(input, selected, multiple) {
+  if (input.files && input.files.length > 0) {
+    selected.classList.remove('d-none');
+    selected.querySelector('span').textContent = multiple 
+      ? `${input.files.length}개 파일 선택됨` 
+      : input.files[0].name;
+  } else {
+    selected.classList.add('d-none');
+  }
+}
+
+function showErr(id, msg) {
+  const el = $(id);
+  if (msg) {
+    el.classList.remove('d-none');
+    el.querySelector('span').textContent = msg;
+  } else {
+    el.classList.add('d-none');
+  }
+}
+
+function updateItemCount() {
+  $('item-count').textContent = `${items.length}개 로드됨 · ${selectedFids.size}개 선택`;
+  
+  const statusEl = $('selection-status');
+  if (selectedFids.size === 3) {
+    statusEl.innerHTML = `<strong>${selectedFids.size}개</strong> 선택 완료 - 예측 준비됨`;
+  } else if (selectedFids.size > 0) {
+    statusEl.innerHTML = `<strong>${selectedFids.size}</strong>/3개 선택됨`;
+  } else {
+    statusEl.innerHTML = `연속된 <strong>3개</strong> 척추체를 선택하세요`;
+  }
+}
+
+// 로딩 애니메이션
+async function showFakeLoading(containerId) {
+  const container = $(containerId);
+  container.classList.remove('d-none');
+  
+  const stages = container.querySelectorAll('.loading-stage');
+  const durations = [1000, 1500, 1500, 1000];
+  
+  for (let i = 0; i < stages.length; i++) {
+    stages[i].classList.add('active');
+    await new Promise(resolve => setTimeout(resolve, durations[i]));
+    stages[i].classList.remove('active');
+    stages[i].classList.add('completed');
+    stages[i].querySelector('.stage-icon').innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+  }
+}
+
+function hideFakeLoading(containerId) {
+  const container = $(containerId);
+  container.classList.add('d-none');
+  
+  const stages = container.querySelectorAll('.loading-stage');
+  const icons = ['bi-upload', 'bi-grid-3x3', 'bi-diagram-3', 'bi-file-earmark-check'];
+  stages.forEach((stage, i) => {
+    stage.classList.remove('active', 'completed');
+    stage.querySelector('.stage-icon').innerHTML = `<i class="bi ${icons[i]}"></i>`;
+  });
+}
+
+function drawSlice(z) {
+  if (!volume) return;
+  $('zlab').textContent = z;
+
+  const drawBase = (ctx, b64) => new Promise(res => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    img.onload = () => {
+      ctx.clearRect(0, 0, 200, 200);
+      ctx.drawImage(img, 0, 0, 200, 200);
+      res();
+    };
+  });
+
+  const drawMaskTint = (ctx, b64, color) => new Promise(res => {
+    const m = new Image();
+    m.src = 'data:image/png;base64,' + b64;
+    m.onload = () => {
+      const tmp = document.createElement('canvas');
+      tmp.width = 200; tmp.height = 200;
+      const tctx = tmp.getContext('2d');
+      tctx.drawImage(m, 0, 0, 200, 200);
+      const mask = tctx.getImageData(0, 0, 200, 200);
+      const imgd = ctx.getImageData(0, 0, 200, 200);
+      const [r, g, b] = color;
+      for (let i = 0; i < mask.data.length; i += 4) {
+        if (mask.data[i] > 0) {
+          imgd.data[i] = Math.max(imgd.data[i], r);
+          imgd.data[i + 1] = Math.max(imgd.data[i + 1], g);
+          imgd.data[i + 2] = Math.max(imgd.data[i + 2], b);
+        }
+      }
+      ctx.putImageData(imgd, 0, 0);
+      ctx.globalAlpha = 0.35;
+      ctx.drawImage(m, 0, 0, 200, 200);
+      ctx.globalAlpha = 1;
+      res();
+    };
+  });
+
+  drawBase(cvs.img, volume.img[z]);
+  drawBase(cvs.mus, volume.img[z]).then(() => drawMaskTint(cvs.mus, volume.muscle[z], [255, 0, 0]));
+  drawBase(cvs.ver, volume.img[z]).then(() => drawMaskTint(cvs.ver, volume.vertebra[z], [0, 0, 255]));
+}
+
+$('z').oninput = e => drawSlice(+e.target.value);
+
+// 척추 레벨 추출 (파일명에서)
+function extractVertebraLevel(name) {
+  const match = name.match(/(T12|L[1-4])/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function renderList() {
+  const list = $('list');
+  list.innerHTML = '';
+  
+  if (items.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <p>CT 영상을 업로드하면 T12-L4 척추체가 자동 분할됩니다</p>
+      </div>
+    `;
+    updateItemCount();
+    return;
+  }
+  
+  items.forEach(it => {
+    const isSelected = selectedFids.has(it.fid);
+    const level = extractVertebraLevel(it.name);
+    const wrap = document.createElement('div');
+    wrap.className = `card-thumb ${isSelected ? 'selected' : ''}`;
+    wrap.innerHTML = `
+      <div class="card-thumb-img">
+        ${level ? `<span class="vertebra-label">${level}</span>` : ''}
+        <img src="data:image/png;base64,${it.preview.img}" alt="${it.name}">
+      </div>
+      <div class="card-thumb-body">
+        <div class="card-thumb-name" title="${it.name}">${it.name}</div>
+        <div class="card-thumb-actions">
+          <button class="btn-sm btn-select ${isSelected ? 'active' : ''}" data-select="${it.fid}">
+            ${isSelected ? '<i class="bi bi-check"></i>' : '선택'}
+          </button>
+          <button class="btn-sm btn-view" data-view="${it.fid}">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    
+    wrap.querySelector(`[data-select="${it.fid}"]`).onclick = (e) => {
+      e.stopPropagation();
+      if (selectedFids.has(it.fid)) {
+        selectedFids.delete(it.fid);
+      } else {
+        if (selectedFids.size >= 3) return;
+        selectedFids.add(it.fid);
+      }
+      $('btn-predict').disabled = !(session && selectedFids.size === 3);
+      renderList();
+    };
+    
+    wrap.querySelector(`[data-view="${it.fid}"]`).onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        focusFid = it.fid;
+        const q = new URLSearchParams({ session, fid: focusFid });
+        const endpoint = (source === 'preproc') ? '/preproc/volume' : '/h5_volume';
+        const res = await fetch(`${API}${endpoint}?${q.toString()}`);
+        if (!res.ok) throw new Error(`Preview failed: ${res.status}`);
+        const jsn = await res.json();
+        volume = jsn.volume;
+        $('z').value = 12;
+        drawSlice(12);
+      } catch (err) {
+        console.error(err);
+        alert('미리보기 로드 실패\n' + err.message);
+      }
+    };
+    
+    list.appendChild(wrap);
+  });
+  
+  updateItemCount();
+}
+
+/* NIfTI 자동 전처리 */
+async function processNifti() {
+  showErr('err-nifti', '');
+  const f = $('nifti').files[0];
+  if (!f) return;
+
+  const fd = new FormData();
+  fd.append('file', f);
+  const gid = $('gpu_id').value.trim();
+  if (gid) fd.append('gpu_id', gid);
+  const name = f.name.toLowerCase();
+  fd.append('file_type', name.endsWith('.nii.gz') || name.endsWith('.gz') ? '.nii.gz' : '.nii');
+
+  $('nifti-zone').classList.add('processing');
+  const loadingPromise = showFakeLoading('loading-nifti');
+
+  try {
+    const res = await fetch(`${API}/preproc/nifti`, { method: 'POST', body: fd });
+    await loadingPromise;
+
+    if (!res.ok) throw new Error(`전처리 실패: ${res.status}`);
+    
+    const jsn = await res.json();
+    session = jsn.session;
+    items = jsn.items;
+    source = 'preproc';
+    
+    if (jsn.muscle_available === false) {
+      $('bone_only').value = 'bone_only';
+      const opt = [...$('bone_only').options].find(o => o.value === 'bone_muscle');
+      if (opt) opt.disabled = true;
+    } else {
+      const opt = [...$('bone_only').options].find(o => o.value === 'bone_muscle');
+      if (opt) opt.disabled = false;
+    }
+    
+    selectedFids.clear();
+    focusFid = null;
+    volume = null;
+    $('btn-predict').disabled = true;
+    $('result').classList.add('d-none');
+    renderList();
+    hideFakeLoading('loading-nifti');
+  } catch (err) {
+    console.error(err);
+    showErr('err-nifti', err.message);
+    hideFakeLoading('loading-nifti');
+  } finally {
+    $('nifti-zone').classList.remove('processing');
+  }
+}
+
+/* DICOM 자동 전처리 */
+async function processDicom() {
+  showErr('err-dicom', '');
+  const files = $('dicoms').files;
+  if (!files.length) return;
+
+  const fd = new FormData();
+  [...files].forEach(f => fd.append('files', f));
+  const gid = $('gpu_id').value.trim();
+  if (gid) fd.append('gpu_id', gid);
+  fd.append('file_type', '.nii.gz');
+
+  $('dicom-zone').classList.add('processing');
+  const loadingPromise = showFakeLoading('loading-dicom');
+
+  try {
+    const res = await fetch(`${API}/preproc/dicom`, { method: 'POST', body: fd });
+    await loadingPromise;
+
+    if (!res.ok) throw new Error(`전처리 실패: ${res.status}`);
+    
+    const jsn = await res.json();
+    session = jsn.session;
+    items = jsn.items;
+    source = 'preproc';
+    
+    if (jsn.muscle_available === false) {
+      $('bone_only').value = 'bone_only';
+      const opt = [...$('bone_only').options].find(o => o.value === 'bone_muscle');
+      if (opt) opt.disabled = true;
+    } else {
+      const opt = [...$('bone_only').options].find(o => o.value === 'bone_muscle');
+      if (opt) opt.disabled = false;
+    }
+    
+    selectedFids.clear();
+    focusFid = null;
+    volume = null;
+    $('btn-predict').disabled = true;
+    $('result').classList.add('d-none');
+    renderList();
+    hideFakeLoading('loading-dicom');
+  } catch (err) {
+    console.error(err);
+    showErr('err-dicom', err.message);
+    hideFakeLoading('loading-dicom');
+  } finally {
+    $('dicom-zone').classList.remove('processing');
+  }
+}
+
+/* HDF5 자동 로드 */
+async function processH5() {
+  showErr('err-h5', '');
+  const files = $('files').files;
+  if (!files.length) return;
+  
+  $('h5-zone').classList.add('processing');
+  $('loading-h5').classList.remove('d-none');
+  
+  try {
+    const fd = new FormData();
+    [...files].forEach(f => fd.append('files', f));
+    const { session: sid, items: its } = await post('/load_h5_multi', fd);
+    session = sid;
+    items = its;
+    source = 'h5';
+    selectedFids.clear();
+    focusFid = null;
+    volume = null;
+    $('btn-predict').disabled = true;
+    $('result').classList.add('d-none');
+    renderList();
+  } catch (err) {
+    console.error(err);
+    showErr('err-h5', String(err));
+  } finally {
+    $('h5-zone').classList.remove('processing');
+    $('loading-h5').classList.add('d-none');
+  }
+}
+
+// 드롭존 초기화
+initDropZone('nifti-zone', 'nifti', 'nifti-selected', false, processNifti);
+initDropZone('dicom-zone', 'dicoms', 'dicom-selected', true, processDicom);
+initDropZone('h5-zone', 'files', 'h5-selected', true, processH5);
+
+/* 예측 */
+$('btn-predict').onclick = async () => {
+  if (selectedFids.size !== 3) {
+    alert('척추체 3개를 선택하세요');
+    return;
+  }
+
+  const hidden_dim = 256;
+  const classifier = $('classifier').value;
+  const dimension = $('dimension').value;
+  const channelsnum = parseInt($('channels_num_2d').value, 10);
+  let bone_only = $('bone_only').value;
+
+  const muscleOpt = [...$('bone_only').options].find(o => o.value === 'bone_muscle');
+  if (muscleOpt && muscleOpt.disabled && bone_only === 'bone_muscle') {
+    alert("근육 마스크를 사용할 수 없습니다. 'bone_only'로 진행합니다.");
+    $('bone_only').value = 'bone_only';
+    bone_only = 'bone_only';
+  }
+
+  const args = {
+    dimension,
+    pretrained: true,
+    classifier,
+    hidden_dim,
+    dim_in: hidden_dim * 9,
+    max_followup: 10,
+    heads_balance: 0,
+    bn_order: 'bn_relu',
+    task: 'MTL',
+    cls_enabled: $('enable-cls').checked,
+    pred_enabled: $('enable-pred').checked,
+    bone_only,
+    channels_num_2d: channelsnum,
+  };
+
+  const fd = new FormData();
+  fd.append('session', session);
+  fd.append('selected', Array.from(selectedFids).join(','));
+  fd.append('args_json', JSON.stringify(args));
+
+  const endpoint = (source === 'preproc') ? '/preproc/predict' : '/predict_h5_multi';
+  
+  $('spin-predict').classList.remove('d-none');
+  $('btn-predict').disabled = true;
+  
+  try {
+    const res = await post(endpoint, fd);
+    const resultEl = $('result');
+    resultEl.classList.remove('d-none');
+    
+    let resultHtml = '<div class="result-grid">';
+    
+    // 골절 분류 결과
+    if (typeof res.cls_probability === 'number') {
+      const p = res.cls_probability;
+      const isPositive = p > 0.5;
+      resultHtml += `
+        <div class="result-card ${isPositive ? 'fracture-positive' : 'fracture-negative'}">
+          <div class="result-card-header">
+            <div>
+              <div class="label">골절 분류 (CLS)</div>
+              <div class="title">Vertebral Fracture</div>
+            </div>
+            <div class="icon">
+              <i class="bi bi-${isPositive ? 'exclamation-triangle' : 'shield-check'}"></i>
+            </div>
+          </div>
+          <div class="result-card-body">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="result-status">
+                <i class="bi bi-${isPositive ? 'x-circle' : 'check-circle'}"></i>
+                ${isPositive ? '골절 위험 높음' : '골절 위험 낮음'}
+              </div>
+              <div class="value">${(p * 100).toFixed(1)}%</div>
+            </div>
+            <div class="result-meta">선택: ${(res.selected_names || []).join(' → ')}</div>
+          </div>
+        </div>
+      `;
+    }
+    
+    // 5년 생존율 결과
+    if (Array.isArray(res.pred_curve) && res.pred_curve.length > 0) {
+      const survivalRates = res.pred_curve.map(v => (1 - v) * 100); // 위험도를 생존율로 변환
+      const finalSurvival = survivalRates[survivalRates.length - 1];
+      
+      let barsHtml = '';
+      const years = [1, 2, 3, 4, 5];
+      years.forEach((year, idx) => {
+        if (idx < survivalRates.length) {
+          const rate = survivalRates[idx];
+          barsHtml += `
+            <div class="survival-bar">
+              <span class="year">${year}년</span>
+              <div class="bar-bg">
+                <div class="bar-fill" style="width: ${rate}%"></div>
+              </div>
+              <span class="percent">${rate.toFixed(1)}%</span>
+            </div>
+          `;
+        }
+      });
+      
+      resultHtml += `
+        <div class="result-card survival">
+          <div class="result-card-header">
+            <div>
+              <div class="label">생존 예측 (PRED)</div>
+              <div class="title">5-Year Survival</div>
+            </div>
+            <div class="icon">
+              <i class="bi bi-heart-pulse"></i>
+            </div>
+          </div>
+          <div class="result-card-body">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <div class="result-status" style="color: #a78bfa;">
+                <i class="bi bi-graph-up"></i>
+                5년 생존율
+              </div>
+              <div class="value">${finalSurvival.toFixed(1)}%</div>
+            </div>
+            <div class="survival-chart">
+              ${barsHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    resultHtml += '</div>';
+    resultEl.innerHTML = resultHtml;
+    
+  } catch (err) {
+    console.error(err);
+    alert('예측 실패\n' + err.message);
+  } finally {
+    $('spin-predict').classList.add('d-none');
+    $('btn-predict').disabled = selectedFids.size !== 3;
+  }
+};
+
+renderList();
+</script>
+</body>
+</html>

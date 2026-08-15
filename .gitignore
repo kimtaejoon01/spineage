@@ -1,0 +1,36 @@
+# AI 모델 / 가중치
+backend/models/
+backend/workspace/
+
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+
+# Node
+node_modules/
+
+# Electron build
+dist/
+build/
+out/
+release/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 환경변수 / 비밀키
+.env
+
+# 임시 / 캐시
+.cache/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

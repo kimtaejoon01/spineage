@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OVCF 진행 예측 · MRI 기반 딥러닝</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161e;
+            --bg-input: #1a1a24;
+            --border-color: #2a2a3a;
+            --text-primary: #f0f0f0;
+            --text-secondary: #888;
+            --accent: #f59e0b;
+            --accent-dim: rgba(245, 158, 11, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 배경 효과 */
+        .bg-effect {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(245, 158, 11, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(251, 191, 36, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(245, 158, 11, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(245, 158, 11, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 네비게이션 */
+        .navbar-custom {
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: relative;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .nav-logo {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .nav-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .nav-badge {
+            background: var(--accent-dim);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .btn-home {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-home:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* 메인 레이아웃 */
+        .main-container {
+            display: flex;
+            min-height: calc(100vh - 74px);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 사이드바 */
+        .sidebar {
+            width: 360px;
+            min-width: 360px;
+            background: rgba(18, 18, 26, 0.6);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid var(--border-color);
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-section-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .sidebar-section-title i {
+            color: var(--accent);
+        }
+
+        /* 모델 정보 */
+        .model-info-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05));
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .model-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .model-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .model-info-label {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .model-info-value {
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        /* 드롭존 */
+        .dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-input);
+        }
+
+        .dropzone:hover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .dropzone.processing {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .dropzone-icon {
+            font-size: 2.5rem;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+        }
+
+        .dropzone-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .dropzone-hint {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-top: 0.5rem;
+        }
+
+        /* 썸네일 그리드 */
+        .thumb-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+            gap: 0.5rem;
+            margin-top: 1rem;
+            max-height: 250px;
+            overflow-y: auto;
+            padding: 0.5rem;
+            background: var(--bg-input);
+            border-radius: 8px;
+        }
+
+        .thumb {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+            opacity: 0.7;
+        }
+
+        .thumb:hover {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .thumb.sel {
+            border-color: var(--accent);
+            opacity: 1;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+        }
+
+        /* 임상 정보 */
+        .clinical-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-input);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .form-check-input:checked {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .clinical-fields {
+            display: none;
+        }
+
+        .clinical-fields.show {
+            display: block;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.3rem;
+        }
+
+        .form-control, .form-select {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .form-control:focus, .form-select:focus {
+            background: var(--bg-input);
+            border-color: var(--accent);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+
+        /* 메인 영역 */
+        .main-content {
+            flex: 1;
+            padding: 1.5rem 2rem;
+            overflow-y: auto;
+        }
+
+        .content-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .content-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .content-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* 프리뷰 카드 */
+        .preview-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.25rem;
+        }
+
+        .preview-header {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .preview-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* 캔버스 영역 */
+        .canvas-wrapper {
+            background: #000;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .canvas-container {
+            max-width: 100%;
+        }
+
+        /* ROI 미리보기 */
+        .roi-wrapper {
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #roi {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        #roi-placeholder {
+            position: absolute;
+            text-align: center;
+        }
+
+        /* 분석 패널 */
+        .analysis-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .analysis-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+        }
+
+        .analysis-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .status-badges {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .status-badge {
+            background: var(--bg-input);
+            padding: 0.4rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-badge.ready {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+        }
+
+        .status-badge.pending {
+            color: var(--text-secondary);
+        }
+
+        /* 요구사항 체크리스트 */
+        .requirements {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+            padding: 1rem;
+            background: var(--bg-input);
+            border-radius: 10px;
+        }
+
+        .req-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .req-item i {
+            font-size: 1rem;
+        }
+
+        .req-item.done {
+            color: #22c55e;
+        }
+
+        .req-item.done i {
+            color: #22c55e;
+        }
+
+        /* 예측 버튼 */
+        .btn-predict {
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            border: none;
+            color: #000;
+            font-weight: 700;
+            padding: 0.875rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-predict:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(245, 158, 11, 0.35);
+            color: #000;
+        }
+
+        .btn-predict:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            color: #000;
+        }
+
+        /* 결과 영역 */
+        #result {
+            margin-top: 1.25rem;
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .result-card.high-risk {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        /* 리셋 버튼 */
+        .btn-reset {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-reset:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* 스피너 */
+        .spinner-border {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        /* 숨김 테이블 */
+        .hidden-table {
+            display: none !important;
+        }
+
+        /* 반응형 */
+        @media (max-width: 1200px) {
+            .sidebar {
+                width: 320px;
+                min-width: 320px;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                min-width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-effect"></div>
+    <div class="bg-grid"></div>
+
+    <!-- 네비게이션 -->
+    <nav class="navbar-custom">
+        <div class="d-flex align-items-center justify-content-between w-100">
+            <div class="nav-brand">
+                <div class="nav-logo">
+                    <i class="bi bi-activity"></i>
+                </div>
+                <span class="nav-title">OVCF 진행 예측</span>
+                <span class="nav-badge">MRI T1</span>
+                <span class="nav-badge">6개월 예측</span>
+            </div>
+            <a href="index.html" class="btn-home">
+                <i class="bi bi-house-door-fill"></i>
+                홈으로
+            </a>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- 사이드바 -->
+        <aside class="sidebar">
+            <!-- 모델 정보 -->
+            <div class="model-info-box">
+                <div class="model-info-row">
+                    <span class="model-info-label">대상 질환</span>
+                    <span class="model-info-value">골다공성 척추 압박골절</span>
+                </div>
+                <div class="model-info-row">
+                    <span class="model-info-label">예측 범위</span>
+                    <span class="model-info-value">6개월 내 진행/붕괴</span>
+                </div>
+                <div class="model-info-row">
+                    <span class="model-info-label">입력</span>
+                    <span class="model-info-value">MRI T1 3프레임 + 6 키포인트</span>
+                </div>
+                <div class="model-info-row">
+                    <span class="model-info-label">모델</span>
+                    <span class="model-info-value">ViT + BiomedCLIP</span>
+                </div>
+                <div class="model-info-row">
+                    <span class="model-info-label">외부검증 정확도</span>
+                    <span class="model-info-value" style="color: var(--accent);">86.6%</span>
+                </div>
+            </div>
+
+            <!-- 파일 업로드 -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">
+                    <i class="bi bi-upload"></i>
+                    DICOM 업로드
+                </div>
+                <input type="file" id="files" multiple accept=".dcm,.dicom,image/*" style="display:none;">
+                <div class="dropzone" id="upload-area">
+                    <div class="dropzone-icon">
+                        <i class="bi bi-file-earmark-medical"></i>
+                    </div>
+                    <div class="dropzone-text">클릭하거나 파일을 드래그하세요</div>
+                    <div class="dropzone-hint">.dcm, .dicom 지원 (다중 선택)</div>
+                    <span id="spin-load" class="spinner-border text-warning mt-2 d-none"></span>
+                </div>
+                <div id="selected-files" class="text-secondary small mt-2"></div>
+
+                <!-- 썸네일 그리드 -->
+                <div id="thumbs" class="thumb-grid"></div>
+            </div>
+
+            <!-- 임상 정보 -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">
+                    <i class="bi bi-clipboard2-pulse"></i>
+                    임상 정보 (선택)
+                </div>
+                <div class="clinical-toggle">
+                    <input class="form-check-input" type="checkbox" id="use_clin">
+                    <label class="form-check-label" for="use_clin">임상 데이터 포함</label>
+                </div>
+                <div id="clin" class="clinical-fields">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label">나이</label>
+                            <input type="number" class="form-control" id="age" placeholder="예: 65">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">성별</label>
+                            <select class="form-select" id="sex">
+                                <option value="F">여성</option>
+                                <option value="M">남성</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">골밀도 (BMD)</label>
+                        <input type="number" step="0.01" class="form-control" id="bmd" placeholder="예: -2.5">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="pre">
+                                <label class="form-check-label small" for="pre">골다공증 약물 (전)</label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="post">
+                                <label class="form-check-label small" for="post">골다공증 약물 (후)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 메인 콘텐츠 -->
+        <main class="main-content">
+            <div class="content-header">
+                <h1 class="content-title">키포인트 지정 및 ROI 생성</h1>
+                <p class="content-subtitle">3개 프레임 선택 후 캔버스에서 6개 키포인트를 클릭하세요</p>
+            </div>
+
+            <!-- 캔버스 + ROI 미리보기 -->
+            <div class="row g-4">
+                <!-- 키포인트 캔버스 -->
+                <div class="col-lg-6">
+                    <div class="preview-card h-100">
+                        <div class="preview-header">
+                            <span class="preview-dot" style="background: var(--accent);"></span>
+                            키포인트 지정
+                            <button id="btn-reset" class="btn-reset ms-auto">
+                                <i class="bi bi-arrow-counterclockwise"></i> 초기화
+                            </button>
+                        </div>
+                        <div class="canvas-wrapper" style="min-height: 400px;">
+                            <canvas id="cv" width="512" height="512"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROI 미리보기 -->
+                <div class="col-lg-6">
+                    <div class="preview-card h-100">
+                        <div class="preview-header">
+                            <span class="preview-dot" style="background: #22c55e;"></span>
+                            ROI 미리보기
+                            <span id="spin-roi" class="spinner-border spinner-border-sm text-warning ms-2 d-none"></span>
+                        </div>
+                        <div class="roi-wrapper">
+                            <div id="roi-placeholder" class="text-secondary">
+                                <i class="bi bi-crop fs-1 opacity-50"></i>
+                                <p class="small mt-2 mb-0 opacity-50">키포인트 지정 후<br>ROI가 생성됩니다</p>
+                            </div>
+                            <img id="roi" class="d-none" src="" alt="ROI">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 분석 패널 -->
+            <div class="analysis-panel">
+                <div class="analysis-header">
+                    <div class="analysis-title">
+                        <i class="bi bi-cpu" style="color: var(--accent);"></i>
+                        AI 예측 실행
+                    </div>
+                    <div class="status-badges">
+                        <span id="status-frames" class="status-badge pending">
+                            <i class="bi bi-images"></i> 프레임 0/3
+                        </span>
+                        <span id="status-keypoints" class="status-badge pending">
+                            <i class="bi bi-geo-alt"></i> 키포인트 0/6
+                        </span>
+                    </div>
+                </div>
+
+                <div class="requirements">
+                    <div id="req-frames" class="req-item">
+                        <i class="bi bi-circle"></i>
+                        MRI T1 3프레임 선택
+                    </div>
+                    <div id="req-keypoints" class="req-item">
+                        <i class="bi bi-circle"></i>
+                        키포인트 6개 지정
+                    </div>
+                    <div id="req-roi" class="req-item">
+                        <i class="bi bi-circle"></i>
+                        ROI 생성 완료
+                    </div>
+                </div>
+
+                <button id="btn-predict" class="btn-predict" disabled>
+                    <i class="bi bi-lightning-charge-fill"></i>
+                    진행 예측 실행
+                    <span id="spin-predict" class="spinner-border spinner-border-sm d-none"></span>
+                </button>
+
+                <div id="result"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 숨겨진 키포인트 테이블 (ovf.js 호환용) -->
+    <table class="hidden-table">
+        <tbody id="kptable"></tbody>
+    </table>
+
+    <!-- 숨겨진 로드 버튼 (ovf.js용) -->
+    <button id="btn-load" style="display:none;"></button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+    <script type="module" src="./js/ovf.js"></script>
+    <script>
+        // 드롭존 클릭 → 파일 선택
+        document.getElementById('upload-area').addEventListener('click', () => {
+            document.getElementById('files').click();
+        });
+
+        // 파일 선택 시 자동 로드
+        document.getElementById('files').addEventListener('change', function() {
+            if (this.files.length > 0) {
+                document.getElementById('upload-area').classList.add('processing');
+                document.getElementById('selected-files').textContent = `${this.files.length}개 파일 선택됨`;
+                // 100ms 후 로드 버튼 클릭
+                setTimeout(() => {
+                    document.getElementById('btn-load').click();
+                }, 100);
+            }
+        });
+
+        // 드래그 앤 드롭
+        const dropzone = document.getElementById('upload-area');
+        
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.style.borderColor = 'var(--accent)';
+            dropzone.style.background = 'var(--accent-dim)';
+        });
+
+        dropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.style.borderColor = '';
+            dropzone.style.background = '';
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.style.borderColor = '';
+            dropzone.style.background = '';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('files').files = files;
+                document.getElementById('files').dispatchEvent(new Event('change'));
+            }
+        });
+
+        // 로딩 상태 제거 함수
+        window.removeUploadLoading = function() {
+            document.getElementById('upload-area').classList.remove('processing');
+        };
+
+        // 임상 정보 토글 (CSS 클래스 방식)
+        document.getElementById('use_clin').addEventListener('change', function() {
+            const clinDiv = document.getElementById('clin');
+            if (this.checked) {
+                clinDiv.classList.add('show');
+            } else {
+                clinDiv.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>

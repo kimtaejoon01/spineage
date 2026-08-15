@@ -1,0 +1,43 @@
+{
+  "name": "ovcf-desktop",
+  "version": "0.3.0",
+  "description": "AI-based osteoporosis-VCF predictor",
+  "author": "Your Name <you@example.com>",
+  "main": "electron/main.js",
+  "scripts": {
+    "start":  "electron .",
+    "dist":   "electron-builder --publish never"
+  },
+
+  "dependencies":   { },
+  "devDependencies":{
+     "electron": "^30.0.0", 
+     "electron-builder": "^26.0.12"  },
+
+
+  "build": {
+    "appId":    "com.mycompany.ovcf",
+    "productName": "OVCF Desktop",
+    "asar": true,
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+    { "from": "backend", "to": "backend" },
+    { "from": "venv",    "to": "venv"    }
+  ],
+
+    "mac": {
+      "target": [ "dmg", "zip" ],
+      "category": "public.app-category.medical",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist"
+    },
+    "win": {
+      "target": [ "nsis" ]
+    },
+    "linux": {
+      "target": [ "AppImage" ]
+    }
+  }
+}
